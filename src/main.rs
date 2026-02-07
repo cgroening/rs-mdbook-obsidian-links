@@ -52,7 +52,7 @@ fn convert_obsidian_links(content: &str) -> String {
             .map(|s| format!("#{}", convert_anchor(s)))
             .unwrap_or_default();
 
-        format!("[{}]({}.md{})", display, mdname, anchor)
+            format!("[{}]({}.md{})", display, mdname.replace(' ', "%20"), anchor)
     }).to_string()
 }
 
@@ -82,7 +82,7 @@ fn process_item(item: &mut Value) -> Result<()> {
     Ok(())
 }
 
-/// Processes the entire book, converting Obsidian links in all sections.
+/// Processes the entire book, converting Obsidian links in all items.
 ///
 /// # Arguments
 /// - `book` - The JSON value representing the book.
@@ -90,9 +90,10 @@ fn process_item(item: &mut Value) -> Result<()> {
 /// # Returns
 /// A Result indicating success or failure.
 fn process_book(book: &mut Value) -> Result<()> {
-    if let Some(sections) = book.get_mut("sections").and_then(|s| s.as_array_mut()) {
-        for section in sections {
-            process_item(section)?;
+    // mdBook 0.5+ uses "items" instead of "sections"
+    if let Some(items) = book.get_mut("items").and_then(|s| s.as_array_mut()) {
+        for item in items {
+            process_item(item)?;
         }
     }
     Ok(())
@@ -119,27 +120,26 @@ fn main() -> Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
 
-    let input_json: Value = serde_json::from_str(&input)?;
+    let mut input_json: Value = serde_json::from_str(&input)?;
 
-    // Determine the data structure based on input format
-    let mut data = if input_json.is_array() {
-        let arr = input_json.as_array().unwrap();
-        if arr.len() != 2 {
+    // mdBook 0.5+ sends [context, book] as an array
+    if let Some(arr) = input_json.as_array_mut() {
+        if arr.len() == 2 {
+            // Modify the book (second element)
+            if let Some(book) = arr.get_mut(1) {
+                process_book(book)?;
+            }
+            // Return the entire array [context, modified_book]
+            serde_json::to_writer(io::stdout(), &arr[1])?;
+        } else {
             anyhow::bail!("Expected array of length 2, got {}", arr.len());
         }
-        arr[1].clone()
-    } else if input_json.is_object() && input_json.get("book").is_some() {
-        input_json["book"].clone()
     } else {
-        anyhow::bail!("Unexpected input format");
-    };
+        anyhow::bail!("Expected input to be an array");
+    }
 
-    // Process the book to convert Obsidian links
-    process_book(&mut data)?;
-    serde_json::to_writer(io::stdout(), &data)?;
     Ok(())
 }
-
 
 /// Unit tests for the conversion functions.
 #[cfg(test)]

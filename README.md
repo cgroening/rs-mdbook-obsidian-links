@@ -56,6 +56,8 @@ cd mdbook-obsidian-links
 cargo install --path .
 ```
 
+If you want to revert this, uninstall the global package with `cargo uninstall mdbook-obsidian-links`
+
 2. Add to your `book.toml`:
 
 ```toml
